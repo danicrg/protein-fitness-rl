@@ -45,7 +45,6 @@ STARTER_ASSAYS = [
 
 
 def _download(url: str, dest: Path) -> Path:
-    """Given plumbing: fetch url to dest once, return dest."""
     if dest.exists():
         return dest
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -57,39 +56,40 @@ def _download(url: str, dest: Path) -> Path:
 
 
 def reference() -> pd.DataFrame:
-    """One row per DMS assay (217): DMS_id, DMS_filename, target_seq, coarse_selection_type, ...
-
-    Use _download(REFERENCE_URL, <path under DATA_DIR>) to fetch and cache it.
-    """
-    raise NotImplementedError("stage 3")
+    """One row per DMS assay: target sequence, selection type, sizes, MSA depth, ..."""
+    path = _download(REFERENCE_URL, DATA_DIR / "reference" / "DMS_substitutions.csv")
+    return pd.read_csv(path)
 
 
 def published_spearman() -> pd.DataFrame:
-    """The leaderboard: one row per assay, one column per model (e.g. "ESM2 (8M)").
-
-    The raw CSV names its id column "DMS ID"; return it indexed by a column named "DMS_id".
-    """
-    raise NotImplementedError("stage 3")
+    """Per-assay zero-shot Spearman published on the ProteinGym leaderboard."""
+    path = _download(
+        PUBLISHED_SPEARMAN_URL, DATA_DIR / "reference" / "DMS_substitutions_Spearman_DMS_level.csv"
+    )
+    return pd.read_csv(path).rename(columns={"DMS ID": "DMS_id"}).set_index("DMS_id")
 
 
 @dataclass
 class Assay:
     dms_id: str
-    target_seq: str  # the wild-type sequence
-    selection_type: str  # Binding, Activity, Expression, Stability or OrganismalFitness
+    target_seq: str
+    selection_type: str
     df: pd.DataFrame  # columns: mutant, mutated_sequence, DMS_score, DMS_score_bin
 
 
 def load_assay(dms_id: str) -> Assay:
-    """Look the assay up in reference(), make sure its CSV is extracted (see _extract), load it.
-
-    Raise KeyError for an unknown dms_id.
-    """
-    raise NotImplementedError("stage 3")
+    ref = reference().set_index("DMS_id")
+    if dms_id not in ref.index:
+        raise KeyError(f"unknown DMS_id {dms_id!r}")
+    row = ref.loc[dms_id]
+    csv_path = DATA_DIR / "DMS_ProteinGym_substitutions" / row["DMS_filename"]
+    if not csv_path.exists():
+        _extract(row["DMS_filename"])
+    df = pd.read_csv(csv_path)
+    return Assay(dms_id, row["target_seq"], row["coarse_selection_type"], df)
 
 
 def _extract(filename: str) -> None:
-    """Given plumbing: pull one assay CSV out of the ProteinGym zip into DATA_DIR."""
     zpath = _download(DMS_ZIP_URL, DATA_DIR / "raw" / "DMS_ProteinGym_substitutions.zip")
     out_dir = DATA_DIR / "DMS_ProteinGym_substitutions"
     out_dir.mkdir(parents=True, exist_ok=True)
