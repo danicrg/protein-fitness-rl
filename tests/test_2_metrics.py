@@ -45,3 +45,8 @@ def test_ignores_nans():
     a = np.array([1.0, 2.0, np.nan, 4.0, 5.0])
     b = np.array([2.0, 1.0, 3.0, np.nan, 5.0])
     assert spearman(a, b) == pytest.approx(spearmanr([1, 2, 5], [2, 1, 5]).statistic)
+
+
+def test_ignores_nans_without_shifting_ranks():
+    # drop the NaN pair BEFORE ranking: what's left is perfectly correlated
+    assert spearman([1.0, 2.0, np.nan, 4.0], [1.0, 2.0, 3.0, 4.0]) == pytest.approx(1.0)
