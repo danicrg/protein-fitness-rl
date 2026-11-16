@@ -1,8 +1,6 @@
-# protein-fitness-rl
+# Protein Fitness RL
 
 Aligning protein language models to experimental fitness with preference optimization and RL, evaluated without leakage.
-
-Working in public: each rung below ships as code plus a short write-up in [posts/](posts/).
 
 ## Plan
 
