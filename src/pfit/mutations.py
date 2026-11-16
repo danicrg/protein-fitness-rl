@@ -23,6 +23,8 @@ def parse_mutant(mutant: str, target_seq: str | None = None, offset: int = 1) ->
     so ``pos = written_position - offset``.
     If ``target_seq`` is given, raise ValueError when its letter at ``pos`` isn't ``wt``.
     """
+    if target_seq == "":
+        raise ValueError("Empty target sequence")
     mutations = []
     for mutation in mutant.split(":"):
         digit_end = len(mutation) - 1
@@ -30,9 +32,12 @@ def parse_mutant(mutant: str, target_seq: str | None = None, offset: int = 1) ->
         pos = int(mutation[1:digit_end]) - offset
         mt = mutation[-1]
 
-        if target_seq and target_seq[pos] != wt:
-            raise ValueError("target write does not match")
+        if target_seq and (pos < 0 or pos >= len(target_seq)):
+            raise ValueError("Mutation {mutation}: replacement index out of range")
         
+        if target_seq and target_seq[pos] != wt:
+            raise ValueError(f"Mutation {mutation}: target write '{wt}' does not match '{target_seq[pos]}'")
+
         mutations.append(
             Mutation(wt, pos, mt)
         )

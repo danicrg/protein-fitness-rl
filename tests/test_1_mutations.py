@@ -46,3 +46,30 @@ def test_apply_single_and_multi():
 
 def test_apply_does_not_change_length():
     assert len(apply_mutant(SEQ, "Y5P")) == len(SEQ)
+
+
+# --- bounds and error messages --------------------------------------------------
+@pytest.mark.parametrize("mutant", ["K0A", "K9A", "K99A"])
+def test_out_of_range_position_raises_valueerror(mutant):
+    # K0A -> pos -1: Python would silently read the LAST residue
+    with pytest.raises(ValueError):
+        parse_mutant(mutant, SEQ)
+
+
+def test_apply_out_of_range_raises_and_never_edits_last_residue():
+    with pytest.raises(ValueError):
+        apply_mutant(SEQ, "K0A")
+
+
+def test_empty_target_is_still_checked():
+    # "" is falsy, but it was given: the check must run (no position 2 in an empty sequence)
+    with pytest.raises(ValueError):
+        parse_mutant("Z2A", "")
+
+
+def test_error_message_names_the_mutant_and_both_letters():
+    with pytest.raises(ValueError) as err:
+        parse_mutant("M1A:A2G", SEQ)  # position 2 is K, not A
+    msg = str(err.value)
+    assert "A2G" in msg, "say which mutation failed"
+    assert "K" in msg.replace("A2G", ""), "say which letter was actually there"
