@@ -23,9 +23,28 @@ def parse_mutant(mutant: str, target_seq: str | None = None, offset: int = 1) ->
     so ``pos = written_position - offset``.
     If ``target_seq`` is given, raise ValueError when its letter at ``pos`` isn't ``wt``.
     """
-    raise NotImplementedError("stage 1")
+    mutations = []
+    for mutation in mutant.split(":"):
+        digit_end = len(mutation) - 1
+        wt = mutation[0]
+        pos = int(mutation[1:digit_end]) - offset
+        mt = mutation[-1]
+
+        if target_seq and target_seq[pos] != wt:
+            raise ValueError("target write does not match")
+        
+        mutations.append(
+            Mutation(wt, pos, mt)
+        )
+    return mutations
 
 
 def apply_mutant(target_seq: str, mutant: str, offset: int = 1) -> str:
     """Return target_seq with every mutation in ``mutant`` applied."""
-    raise NotImplementedError("stage 1")
+    new_seq = list(target_seq)
+
+    mutations = parse_mutant(mutant, target_seq=target_seq, offset=offset)
+    for mutation in mutations: 
+        new_seq[mutation.pos] = mutation.mt
+
+    return ''.join(new_seq)
