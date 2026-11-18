@@ -53,14 +53,34 @@ class ESM2Scorer:
     def masked_logprobs(self, seq: str, positions: list[int]) -> dict[int, torch.Tensor]:
         """{position: log-probs over the whole vocabulary (len(self.tok)) with that position
         masked}. One masked copy of the sequence per position; batch them."""
-        raise NotImplementedError("stage 4a")
+        tokenized_seq = self.tok(seq, return_tensors='pt')['input_ids']
+        ids = tokenized_seq.repeat(len(positions), 1)
+        for i, position in enumerate(positions):
+            ids[0][position + 1] = self.tok.mask_token_id
+        logits = self.model(ids).logits
+        masked_logprobs = {}
+        for i, position in enumerate(positions):
+            masked_logprobs[position] = torch.log_softmax(logits[i][position + 1], dim=-1)
+        return masked_logprobs
+            
 
     # 4b
     @torch.no_grad()
     def score_mutant_naive(self, target_seq: str, mutant: str) -> float:
         """Masked-marginal score of one mutant: one forward pass per mutated position.
         Slow but obviously correct; stage 4c is checked against it."""
-        raise NotImplementedError("stage 4b")
+        total_score = 0
+        for submutant in mutant.split(":"):
+            position = int(submutant[1:len(submutant)-1]) -1
+            ids = self.tok.convert_tokens_to_ids
+            original_id = ids(submutant[0])
+            destination_id = ids(submutant[-1])
+            masked_logprobs = self.masked_logprobs(target_seq, [position])[position]
+        
+            total_score += masked_logprobs[destination_id] - masked_logprobs[original_id]
+        return total_score.item()
+
+
 
     # 4c
     def score_mutants(self, target_seq: str, mutants: list[str]) -> list[float]:
