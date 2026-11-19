@@ -51,6 +51,23 @@ def test_4a_masking_changes_the_prediction(scorer):
     assert unmasked[wt] > lp[wt], "unmasked should be more confident in the wild type"
 
 
+def test_4a_batch_matches_one_at_a_time(scorer):
+    # each copy in the batch must mask only its own position
+    batch = scorer.masked_logprobs(SEQ, [0, 10, 50])
+    for p in (0, 10, 50):
+        alone = scorer.masked_logprobs(SEQ, [p])[p]
+        assert torch.allclose(batch[p], alone, atol=1e-4), f"position {p} differs in the batch"
+
+
+@pytest.mark.skipif(
+    not (torch.cuda.is_available() or torch.backends.mps.is_available()), reason="no accelerator"
+)
+def test_4a_runs_on_the_default_device():
+    gpu = ESM2Scorer("ESM2 (8M)")  # default device: cuda or mps
+    lp = gpu.masked_logprobs(SEQ, [10])[10]
+    assert lp.shape == (len(gpu.tok),)
+
+
 # 4b: naive scoring, one forward pass per mutated position ---------------------
 def test_4b_naive_single_is_logratio(scorer):
     lp = scorer.masked_logprobs(SEQ, [4])[4]
@@ -66,12 +83,53 @@ def test_4b_naive_multi_is_sum_of_singles(scorer):
     assert both == pytest.approx(singles, abs=1e-4)
 
 
+def test_4b_wrong_wild_type_raises(scorer):
+    # a mutant whose wild-type letter doesn't match the sequence is a data error, not a score
+    wrong = "W" if SEQ[0] != "W" else "A"
+    with pytest.raises(ValueError):
+        scorer.score_mutant_naive(SEQ, f"{wrong}1A")
+
+
+def test_4b_returns_a_python_float(scorer):
+    assert type(scorer.score_mutant_naive(SEQ, f"{SEQ[4]}5W")) is float
+
+
 # 4c: batched scoring, one forward pass per distinct position ------------------
 def test_4c_batched_equals_naive(scorer):
     muts = random_mutants(SEQ, 25) + random_mutants(SEQ, 10, k=2, seed=1)
     fast = scorer.score_mutants(SEQ, muts)
     slow = [scorer.score_mutant_naive(SEQ, m) for m in muts]
     assert fast == pytest.approx(slow, abs=1e-3)
+
+
+def test_4c_returns_python_floats(scorer):
+    out = scorer.score_mutants(SEQ, random_mutants(SEQ, 5))
+    assert all(type(x) is float for x in out), "return float(...), not tensors"
+
+
+def test_4c_wrong_wild_type_raises(scorer):
+    wrong = "W" if SEQ[0] != "W" else "A"
+    with pytest.raises(ValueError):
+        scorer.score_mutants(SEQ, [f"{SEQ[4]}5W", f"{wrong}1A"])
+
+
+def test_4c_one_masked_row_per_distinct_position_in_bounded_batches(scorer):
+    # memory grows with batch x length^2: one unchunked batch on a 1000-residue protein is ~80 GB
+    muts = random_mutants(SEQ, 150) + random_mutants(SEQ, 30, k=2, seed=1)
+    distinct = {int(t[1:-1]) for m in muts for t in m.split(":")}
+    batch_sizes = []
+
+    def record(module, args, kwargs):
+        ids = args[0] if args else kwargs["input_ids"]
+        batch_sizes.append(ids.shape[0])
+
+    handle = scorer.model.register_forward_pre_hook(record, with_kwargs=True)
+    try:
+        scorer.score_mutants(SEQ, muts)
+    finally:
+        handle.remove()
+    assert sum(batch_sizes) == len(distinct), "one masked copy per distinct position, no repeats"
+    assert max(batch_sizes) <= 64, f"one forward pass saw {max(batch_sizes)} sequences: chunk it"
 
 
 # 4d: windows for sequences longer than the model's context --------------------

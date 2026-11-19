@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import torch
 from transformers import AutoTokenizer, EsmForMaskedLM
+from pfit.mutations import parse_mutant
 
 # ProteinGym leaderboard column -> Hugging Face checkpoint (given)
 ESM2_CHECKPOINTS = {
@@ -53,10 +54,10 @@ class ESM2Scorer:
     def masked_logprobs(self, seq: str, positions: list[int]) -> dict[int, torch.Tensor]:
         """{position: log-probs over the whole vocabulary (len(self.tok)) with that position
         masked}. One masked copy of the sequence per position; batch them."""
-        tokenized_seq = self.tok(seq, return_tensors='pt')['input_ids']
+        tokenized_seq = self.tok(seq, return_tensors='pt')['input_ids'].to(self.device)
         ids = tokenized_seq.repeat(len(positions), 1)
         for i, position in enumerate(positions):
-            ids[0][position + 1] = self.tok.mask_token_id
+            ids[i][position + 1] = self.tok.mask_token_id
         logits = self.model(ids).logits
         masked_logprobs = {}
         for i, position in enumerate(positions):
@@ -72,11 +73,13 @@ class ESM2Scorer:
         total_score = 0
         for submutant in mutant.split(":"):
             position = int(submutant[1:len(submutant)-1]) -1
+            if target_seq[position] != submutant[0]:
+                raise ValueError(f"The mutation {submutant} is incompatible with the sequence")
             ids = self.tok.convert_tokens_to_ids
             original_id = ids(submutant[0])
             destination_id = ids(submutant[-1])
             masked_logprobs = self.masked_logprobs(target_seq, [position])[position]
-        
+            # we sum because in log space sum equals multiplication in linear. 
             total_score += masked_logprobs[destination_id] - masked_logprobs[original_id]
         return total_score.item()
 
@@ -86,4 +89,21 @@ class ESM2Scorer:
     def score_mutants(self, target_seq: str, mutants: list[str]) -> list[float]:
         """Same scores as score_mutant_naive, for many mutants, with ONE masked forward pass per
         distinct mutated position (an assay has ~19 mutants per position)."""
-        raise NotImplementedError("stage 4c")
+        positions = set()
+        parsed_mutants = list()
+        ids = self.tok.convert_tokens_to_ids
+        for mutant in mutants: 
+            mutations = parse_mutant(mutant)
+            parsed_mutants.append(mutations)
+            for mutation in mutations:
+                positions.add(mutation.pos)
+        positions = list(positions)
+        masked_logprobs = self.masked_logprobs(target_seq, positions)
+        scores = []
+        for mutations in parsed_mutants:
+            score = 0
+            for submutant in mutations:
+                lps = masked_logprobs[submutant.pos]
+                score += lps[ids(submutant.mt)] - lps[ids(submutant.wt)]
+            scores.append(score.item())
+        return scores
