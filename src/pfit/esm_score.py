@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import torch
 from transformers import AutoTokenizer, EsmForMaskedLM
+
 from pfit.mutations import parse_mutant
 
 # ProteinGym leaderboard column -> Hugging Face checkpoint (given)

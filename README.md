@@ -6,7 +6,7 @@ Aligning protein language models to experimental fitness with preference optimiz
 
 | Rung | Question | Status |
 |---|---|---|
-| 1 | Can I reproduce ESM2 zero-shot fitness prediction on [ProteinGym](https://proteingym.org)? | in progress: building the scoring pipeline stage by stage |
+| 1 | Can I reproduce ESM2 zero-shot fitness prediction on [ProteinGym](https://proteingym.org)? | reproduced: all 402 (model, assay) Spearman values on the 201 assays up to 1022 residues match the leaderboard to 3 decimals (ESM2 8M and 35M; [table](results/zero_shot.csv)). Next: bootstrap CIs, write-up |
 | 2 | How much do random train/test splits overstate supervised fitness models? (sequence-identity-aware splits) | |
 | 3 | Does DPO/GRPO against a learned fitness oracle improve generated sequences, and when does it reward-hack? | |
 | 4 | Workshop paper and a ProteinGym leaderboard submission | |

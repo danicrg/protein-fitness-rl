@@ -36,7 +36,9 @@ def parse_mutant(mutant: str, target_seq: str | None = None, offset: int = 1) ->
             raise ValueError("Mutation {mutation}: replacement index out of range")
         
         if target_seq and target_seq[pos] != wt:
-            raise ValueError(f"Mutation {mutation}: target write '{wt}' does not match '{target_seq[pos]}'")
+            raise ValueError(
+                f"Mutation {mutation}: target write '{wt}' does not match '{target_seq[pos]}'"
+            )
 
         mutations.append(
             Mutation(wt, pos, mt)
