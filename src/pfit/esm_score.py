@@ -47,7 +47,19 @@ class ESM2Scorer:
         Whole sequence if it fits in MAX_TOKENS - 2 residues; otherwise exactly MAX_TOKENS - 2
         residues, centred on ``pos`` as far as the sequence ends allow.
         """
-        raise NotImplementedError("stage 4d")
+        if seq_len < MAX_TOKENS - 2:
+            return 0, seq_len
+
+        start = pos - (MAX_TOKENS-2)//2
+        end = pos + (MAX_TOKENS-2) //2
+        if start < 0:
+            end -= start
+            start -= start
+        if end > seq_len:
+            start -= end - seq_len
+            end = seq_len
+        
+        return max(0, start), end
 
     # 4a
     @torch.no_grad()
@@ -58,10 +70,18 @@ class ESM2Scorer:
         ids = tokenized_seq.repeat(len(positions), 1)
         for i, position in enumerate(positions):
             ids[i][position + 1] = self.tok.mask_token_id
-        logits = self.model(ids).logits
+        # Chunking: at most batch_size copies per forward pass, so memory stays bounded
+        batch_size = 32
+        rows = []
+        for start in range(0, len(positions), batch_size):
+            partial_logits = self.model(ids[start:start+batch_size]).logits  # (chunk, L+2, vocab)
+            for j, p in enumerate(positions[start:start+batch_size]):
+                rows.append(partial_logits[j, p + 1])  # copy j of this chunk, at its mask
+        logits = torch.stack(rows)  # (n, vocab), row i is positions[i]
+
         masked_logprobs = {}
         for i, position in enumerate(positions):
-            masked_logprobs[position] = torch.log_softmax(logits[i][position + 1], dim=-1)
+            masked_logprobs[position] = torch.log_softmax(logits[i], dim=-1)
         return masked_logprobs
             
 
@@ -93,7 +113,7 @@ class ESM2Scorer:
         parsed_mutants = list()
         ids = self.tok.convert_tokens_to_ids
         for mutant in mutants: 
-            mutations = parse_mutant(mutant)
+            mutations = parse_mutant(mutant, target_seq=target_seq)
             parsed_mutants.append(mutations)
             for mutation in mutations:
                 positions.add(mutation.pos)
